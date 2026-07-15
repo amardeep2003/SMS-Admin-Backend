@@ -8,7 +8,11 @@ import {
   toggleBatchStatus,
 } from "../controllers/batchController.js";
 
+import protect from "../middleware/authMiddleware.js";
+
 const router = express.Router();
+
+router.use(protect);
 
 router.get("/", getAllBatches);
 

@@ -204,7 +204,7 @@ export const getBatchById = async (req, res) => {
       .populate({
         path: "course",
         select:
-          "name type description durationMonths actualPrice discountedPrice status",
+          "name type durationMonths actualPrice discountedPrice status",
       })
       .populate({
         path: "students",
@@ -212,7 +212,7 @@ export const getBatchById = async (req, res) => {
       })
       .populate({
         path: "trainer",
-        select: "name fullName mobileNumber",
+        select: "name phone",
       })
       .lean();
 
@@ -246,194 +246,295 @@ export const getBatchById = async (req, res) => {
    Basic fields + course validation + capacity handling
    ========================================================= */
 
+// export const updateBatch = async (req, res) => {
+//   const session = await mongoose.startSession();
+
+//   try {
+//     session.startTransaction();
+
+//     const { id } = req.params;
+
+//     const {
+//       name,
+//       // course,
+//       // courseType,
+//       mode,
+//       capacity,
+//       startDate,
+//       endDate,
+//       trainer,
+//       status,
+//     } = req.body;
+
+//     if (!mongoose.Types.ObjectId.isValid(id)) {
+//       await session.abortTransaction();
+
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid batch ID.",
+//       });
+//     }
+
+//     const batch = await Batch.findById(id).session(session);
+
+//     if (!batch) {
+//       await session.abortTransaction();
+
+//       return res.status(404).json({
+//         success: false,
+//         message: "Batch not found.",
+//       });
+//     }
+
+//     /* -----------------------------
+//        Course + Course Type validation
+//        ----------------------------- */
+
+//     const finalCourseId = course || batch.course;
+//     const finalCourseType = (courseType || batch.courseType).toUpperCase();
+
+//     if (!["VT", "LT"].includes(finalCourseType)) {
+//       await session.abortTransaction();
+
+//       return res.status(400).json({
+//         success: false,
+//         message: "Course type must be VT or LT.",
+//       });
+//     }
+
+//     if (!mongoose.Types.ObjectId.isValid(finalCourseId)) {
+//       await session.abortTransaction();
+
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid course ID.",
+//       });
+//     }
+
+//     const selectedCourse =
+//       await Course.findById(finalCourseId).session(session);
+
+//     if (!selectedCourse) {
+//       await session.abortTransaction();
+
+//       return res.status(404).json({
+//         success: false,
+//         message: "Course not found.",
+//       });
+//     }
+
+//     if (selectedCourse.type !== finalCourseType) {
+//       await session.abortTransaction();
+
+//       return res.status(400).json({
+//         success: false,
+//         message: `Selected course belongs to ${selectedCourse.type}, not ${finalCourseType}.`,
+//       });
+//     }
+
+//     /* -----------------------------
+//        Capacity validation
+//        ----------------------------- */
+
+//     const newCapacity =
+//       capacity !== undefined ? Number(capacity) : batch.capacity;
+
+//     if (!Number.isInteger(newCapacity) || newCapacity < 1) {
+//       await session.abortTransaction();
+
+//       return res.status(400).json({
+//         success: false,
+//         message: "Capacity must be a whole number greater than 0.",
+//       });
+//     }
+
+//     const currentStudentCount = batch.students.length;
+
+//     // Students who must be shifted
+//     if (newCapacity < currentStudentCount) {
+//       const overflowCount = currentStudentCount - newCapacity;
+
+//       // Last added students are moved
+//       const studentsToMove = batch.students.slice(-overflowCount);
+
+//       batch.students = batch.students.slice(0, newCapacity);
+
+//       // Find other batches of SAME course
+//       for (const studentId of studentsToMove) {
+//         let targetBatch = await Batch.findOne({
+//           _id: { $ne: batch._id },
+//           course: finalCourseId,
+//           status: "ACTIVE",
+//           $expr: {
+//             $lt: [{ $size: { $ifNull: ["$students", []] } }, "$capacity"],
+//           },
+//         })
+//           .sort({ createdAt: 1 })
+//           .session(session);
+
+//         // If no available batch, create new batch
+//         if (!targetBatch) {
+//           const batchCount = await Batch.countDocuments({
+//             course: finalCourseId,
+//           }).session(session);
+
+//           const generatedName = `${selectedCourse.name} Batch ${batchCount + 1}`;
+
+//           const createdBatches = await Batch.create(
+//             [
+//               {
+//                 name: generatedName,
+//                 course: finalCourseId,
+//                 courseType: finalCourseType,
+//                 mode: mode || batch.mode,
+//                 capacity: batch.capacity,
+//                 students: [],
+//                 enrolledStudents: 0,
+//                 status: "ACTIVE",
+//               },
+//             ],
+//             { session },
+//           );
+
+//           targetBatch = createdBatches[0];
+//         }
+
+//         targetBatch.students.push(studentId);
+//         targetBatch.enrolledStudents = targetBatch.students.length;
+
+//         await targetBatch.save({ session });
+
+//         // IMPORTANT:
+//         // Enrollment batchId must also change
+//         await Enrollment.findOneAndUpdate(
+//           {
+//             studentId,
+//             courseId: finalCourseId,
+//             status: "ACTIVE",
+//           },
+//           {
+//             $set: {
+//               batchId: targetBatch._id,
+//             },
+//           },
+//           {
+//             session,
+//           },
+//         );
+//       }
+//     }
+
+//     /* -----------------------------
+//        Update fields
+//        ----------------------------- */
+
+//     if (name !== undefined) batch.name = name;
+
+//     batch.course = finalCourseId;
+//     batch.courseType = finalCourseType;
+
+//     if (mode !== undefined) batch.mode = mode;
+//     if (startDate !== undefined) {
+//       batch.startDate = startDate || null;
+//     }
+
+//     if (endDate !== undefined) {
+//       batch.endDate = endDate || null;
+//     }
+
+//     if (trainer !== undefined) {
+//       batch.trainer = trainer || null;
+//     }
+
+//     if (status !== undefined) {
+//       batch.status = status;
+//     }
+
+//     batch.capacity = newCapacity;
+//     batch.enrolledStudents = batch.students.length;
+
+//     await batch.save({ session });
+
+//     await session.commitTransaction();
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Batch updated successfully.",
+//       data: batch,
+//     });
+//   } catch (error) {
+//     await session.abortTransaction();
+
+//     console.error("Update batch error:", error);
+
+//     if (error.code === 11000) {
+//       return res.status(409).json({
+//         success: false,
+//         message: "Batch name already exists.",
+//       });
+//     }
+
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message || "Internal server error.",
+//     });
+//   } finally {
+//     await session.endSession();
+//   }
+// };
+
 export const updateBatch = async (req, res) => {
-  const session = await mongoose.startSession();
-
   try {
-    session.startTransaction();
-
     const { id } = req.params;
 
-    const {
-      name,
-      course,
-      courseType,
-      mode,
-      capacity,
-      startDate,
-      endDate,
-      trainer,
-      status,
-    } = req.body;
+    const { name, mode, capacity, startDate, endDate, trainer, status } =
+      req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      await session.abortTransaction();
-
       return res.status(400).json({
         success: false,
         message: "Invalid batch ID.",
       });
     }
 
-    const batch = await Batch.findById(id).session(session);
+    const batch = await Batch.findById(id);
 
     if (!batch) {
-      await session.abortTransaction();
-
       return res.status(404).json({
         success: false,
         message: "Batch not found.",
       });
     }
 
-    /* -----------------------------
-       Course + Course Type validation
-       ----------------------------- */
+    // Capacity can only be increased
+    if (capacity !== undefined) {
+      const newCapacity = Number(capacity);
 
-    const finalCourseId = course || batch.course;
-    const finalCourseType = (courseType || batch.courseType).toUpperCase();
-
-    if (!["VT", "LT"].includes(finalCourseType)) {
-      await session.abortTransaction();
-
-      return res.status(400).json({
-        success: false,
-        message: "Course type must be VT or LT.",
-      });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(finalCourseId)) {
-      await session.abortTransaction();
-
-      return res.status(400).json({
-        success: false,
-        message: "Invalid course ID.",
-      });
-    }
-
-    const selectedCourse =
-      await Course.findById(finalCourseId).session(session);
-
-    if (!selectedCourse) {
-      await session.abortTransaction();
-
-      return res.status(404).json({
-        success: false,
-        message: "Course not found.",
-      });
-    }
-
-    if (selectedCourse.type !== finalCourseType) {
-      await session.abortTransaction();
-
-      return res.status(400).json({
-        success: false,
-        message: `Selected course belongs to ${selectedCourse.type}, not ${finalCourseType}.`,
-      });
-    }
-
-    /* -----------------------------
-       Capacity validation
-       ----------------------------- */
-
-    const newCapacity =
-      capacity !== undefined ? Number(capacity) : batch.capacity;
-
-    if (!Number.isInteger(newCapacity) || newCapacity < 1) {
-      await session.abortTransaction();
-
-      return res.status(400).json({
-        success: false,
-        message: "Capacity must be a whole number greater than 0.",
-      });
-    }
-
-    const currentStudentCount = batch.students.length;
-
-    // Students who must be shifted
-    if (newCapacity < currentStudentCount) {
-      const overflowCount = currentStudentCount - newCapacity;
-
-      // Last added students are moved
-      const studentsToMove = batch.students.slice(-overflowCount);
-
-      batch.students = batch.students.slice(0, newCapacity);
-
-      // Find other batches of SAME course
-      for (const studentId of studentsToMove) {
-        let targetBatch = await Batch.findOne({
-          _id: { $ne: batch._id },
-          course: finalCourseId,
-          status: "ACTIVE",
-          $expr: {
-            $lt: [{ $size: { $ifNull: ["$students", []] } }, "$capacity"],
-          },
-        })
-          .sort({ createdAt: 1 })
-          .session(session);
-
-        // If no available batch, create new batch
-        if (!targetBatch) {
-          const batchCount = await Batch.countDocuments({
-            course: finalCourseId,
-          }).session(session);
-
-          const generatedName = `${selectedCourse.name} Batch ${batchCount + 1}`;
-
-          const createdBatches = await Batch.create(
-            [
-              {
-                name: generatedName,
-                course: finalCourseId,
-                courseType: finalCourseType,
-                mode: mode || batch.mode,
-                capacity: batch.capacity,
-                students: [],
-                enrolledStudents: 0,
-                status: "ACTIVE",
-              },
-            ],
-            { session },
-          );
-
-          targetBatch = createdBatches[0];
-        }
-
-        targetBatch.students.push(studentId);
-        targetBatch.enrolledStudents = targetBatch.students.length;
-
-        await targetBatch.save({ session });
-
-        // IMPORTANT:
-        // Enrollment batchId must also change
-        await Enrollment.findOneAndUpdate(
-          {
-            studentId,
-            courseId: finalCourseId,
-            status: "ACTIVE",
-          },
-          {
-            $set: {
-              batchId: targetBatch._id,
-            },
-          },
-          {
-            session,
-          },
-        );
+      if (!Number.isInteger(newCapacity) || newCapacity < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "Capacity must be a whole number greater than 0.",
+        });
       }
+
+      if (newCapacity < batch.capacity) {
+        return res.status(400).json({
+          success: false,
+          message: `Capacity cannot be decreased. Current capacity is ${batch.capacity}.`,
+        });
+      }
+
+      batch.capacity = newCapacity;
     }
 
-    /* -----------------------------
-       Update fields
-       ----------------------------- */
+    if (name !== undefined) {
+      batch.name = name;
+    }
 
-    if (name !== undefined) batch.name = name;
+    if (mode !== undefined) {
+      batch.mode = mode;
+    }
 
-    batch.course = finalCourseId;
-    batch.courseType = finalCourseType;
-
-    if (mode !== undefined) batch.mode = mode;
     if (startDate !== undefined) {
       batch.startDate = startDate || null;
     }
@@ -447,15 +548,10 @@ export const updateBatch = async (req, res) => {
     }
 
     if (status !== undefined) {
-      batch.status = status;
+      batch.status = String(status).trim().toUpperCase();
     }
 
-    batch.capacity = newCapacity;
-    batch.enrolledStudents = batch.students.length;
-
-    await batch.save({ session });
-
-    await session.commitTransaction();
+    await batch.save();
 
     return res.status(200).json({
       success: true,
@@ -463,8 +559,6 @@ export const updateBatch = async (req, res) => {
       data: batch,
     });
   } catch (error) {
-    await session.abortTransaction();
-
     console.error("Update batch error:", error);
 
     if (error.code === 11000) {
@@ -478,8 +572,6 @@ export const updateBatch = async (req, res) => {
       success: false,
       message: error.message || "Internal server error.",
     });
-  } finally {
-    await session.endSession();
   }
 };
 
