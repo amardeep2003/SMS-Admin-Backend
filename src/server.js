@@ -7,6 +7,11 @@ import validateEnv from "./config/validateEnv.js";
 import healthRoutes from "./routes/healthRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import courseRoutes from "./routes/courseRoutes.js";
+import trainerRoutes from "./routes/trainerRoutes.js";
+import registerRoutes from "./routes/registrationRoutes.js";
+import studentRoutes from "./routes/studentRoutes.js";
+import enrollmentRoutes from "./routes/enrollmentRoutes.js";
+import batchRoutes from "./routes/batchRoutes.js";
 
 
 dotenv.config();
@@ -22,6 +27,11 @@ app.use(cookieParser());
 app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
+app.use("/api/trainers", trainerRoutes);
+app.use("/api/register", registerRoutes);
+app.use("/api/student", studentRoutes);
+app.use("/api/enrollments", enrollmentRoutes);
+app.use("/api/batch", batchRoutes);
 
 
 

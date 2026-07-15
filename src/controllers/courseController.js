@@ -794,3 +794,77 @@ export const deleteCourse = async (req, res) => {
     });
   }
 };
+
+/**
+ * GET /api/courses/dropdown
+ * Get all active courses for dropdown.
+ * Returns only course ID and name.
+ */
+// export const getActiveCoursesDropdown = async (req, res) => {
+//   try {
+//     const courses = await Course.find({
+//       status: "ACTIVE",
+//     })
+//       .select("_id name")
+//       .sort({ name: 1 })
+//       .lean();
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Active courses fetched successfully.",
+//       courses,
+//     });
+//   } catch (error) {
+//     console.error(
+//       "Get active courses dropdown error:",
+//       error.message,
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error.",
+//     });
+//   }
+// };
+
+export const getActiveCoursesDropdown = async (req, res) => {
+  try {
+    const { type } = req.query;
+
+    const filter = {
+      status: "ACTIVE",
+    };
+
+    // Course type filter
+    if (type) {
+      const normalizedType = type.trim().toUpperCase();
+
+      if (!["VT", "LT"].includes(normalizedType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Course type must be either VT or LT.",
+        });
+      }
+
+      filter.type = normalizedType;
+    }
+
+    const courses = await Course.find(filter)
+      .select("_id name type")
+      .sort({ name: 1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      message: "Active courses fetched successfully.",
+      courses,
+    });
+  } catch (error) {
+    console.error("Get active courses dropdown error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};

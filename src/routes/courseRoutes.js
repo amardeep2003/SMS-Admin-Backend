@@ -7,6 +7,7 @@ import {
   updateCourse,
   toggleCourseStatus,
   deleteCourse,
+  getActiveCoursesDropdown
 } from "../controllers/courseController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -19,6 +20,8 @@ router.use(protect);
 router.post("/", createCourse);
 
 router.get("/", getAllCourses);
+
+router.get("/dropdown", getActiveCoursesDropdown);
 
 router.patch("/:id/status", toggleCourseStatus);
 
