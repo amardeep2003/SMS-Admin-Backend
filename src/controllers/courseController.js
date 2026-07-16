@@ -438,6 +438,43 @@ export const getAllCourses = async (req, res) => {
  * GET /api/courses/:id
  * Get a single course.
  */
+// export const getCourseById = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(id)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid course ID.",
+//       });
+//     }
+
+//     const course = await Course.findById(id).lean();
+
+//     if (!course) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Course not found.",
+//       });
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Course fetched successfully.",
+//       course,
+//     });
+//   } catch (error) {
+//     console.error("Get course error:", error.message);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error.",
+//     });
+//   }
+// };
+
+import Batch from "../models/batch.js";
+
 export const getCourseById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -458,10 +495,26 @@ export const getCourseById = async (req, res) => {
       });
     }
 
+    // Get all ACTIVE batches of this course
+    const batches = await Batch.find({
+      course: id,
+      status: "ACTIVE",
+    })
+      .populate({
+        path: "trainer",
+        select: "name",
+      })
+      .select("name capacity enrolledStudents startDate endDate trainer")
+      .sort({ startDate: 1 })
+      .lean();
+
     return res.status(200).json({
       success: true,
       message: "Course fetched successfully.",
-      course,
+      data: {
+        ...course,
+        activeBatches: batches,
+      },
     });
   } catch (error) {
     console.error("Get course error:", error.message);
@@ -472,7 +525,6 @@ export const getCourseById = async (req, res) => {
     });
   }
 };
-
 /**
  * PATCH /api/courses/:id
  * Update a course.

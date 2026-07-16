@@ -12,6 +12,7 @@ import registerRoutes from "./routes/registrationRoutes.js";
 import studentRoutes from "./routes/studentRoutes.js";
 import enrollmentRoutes from "./routes/enrollmentRoutes.js";
 import batchRoutes from "./routes/batchRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 
 dotenv.config();
@@ -32,6 +33,7 @@ app.use("/api/register", registerRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/enrollments", enrollmentRoutes);
 app.use("/api/batch", batchRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 
 

@@ -203,8 +203,7 @@ export const getBatchById = async (req, res) => {
     const batch = await Batch.findById(id)
       .populate({
         path: "course",
-        select:
-          "name type durationMonths actualPrice discountedPrice status",
+        select: "name type durationMonths actualPrice discountedPrice status",
       })
       .populate({
         path: "students",
@@ -595,24 +594,26 @@ export const addStudentToBatch = async (req, res) => {
     session.startTransaction();
 
     const { id: batchId } = req.params;
-    const { studentId, forceMove = false } = req.body;
+    const { mobileNumber, forceMove = false } = req.body;
 
-    if (
-      !mongoose.Types.ObjectId.isValid(batchId) ||
-      !mongoose.Types.ObjectId.isValid(studentId)
-    ) {
+    // -----------------------
+    // Mobile validation
+    // -----------------------
+    if (!/^[6-9]\d{9}$/.test(mobileNumber)) {
       await session.abortTransaction();
 
       return res.status(400).json({
         success: false,
-        message: "Invalid batch or student ID.",
+        message: "Please provide a valid 10 digit mobile number.",
       });
     }
 
-    const [batch, student] = await Promise.all([
-      Batch.findById(batchId).session(session),
-      Student.findById(studentId).session(session),
-    ]);
+    // -----------------------
+    // Batch
+    // -----------------------
+    const batch = await Batch.findById(batchId)
+      .populate("course", "name type")
+      .session(session);
 
     if (!batch) {
       await session.abortTransaction();
@@ -623,6 +624,13 @@ export const addStudentToBatch = async (req, res) => {
       });
     }
 
+    // -----------------------
+    // Student
+    // -----------------------
+    const student = await Student.findOne({
+      mobileNumber,
+    }).session(session);
+
     if (!student) {
       await session.abortTransaction();
 
@@ -632,10 +640,12 @@ export const addStudentToBatch = async (req, res) => {
       });
     }
 
-    // Student must actually be enrolled in this course
+    // -----------------------
+    // Student enrolled in this course?
+    // -----------------------
     const enrollment = await Enrollment.findOne({
-      studentId,
-      courseId: batch.course,
+      studentId: student._id,
+      courseId: batch.course._id,
       status: "ACTIVE",
     }).session(session);
 
@@ -644,39 +654,43 @@ export const addStudentToBatch = async (req, res) => {
 
       return res.status(400).json({
         success: false,
-        message: "Student is not actively enrolled in this course.",
+        message: `Please enroll "${student.fullName}" in "${batch.course.name}" course first.`,
       });
     }
 
-    // Already in current batch
-    const alreadyInCurrentBatch = batch.students.some(
-      (id) => id.toString() === studentId.toString(),
-    );
-
-    if (alreadyInCurrentBatch) {
+    // -----------------------
+    // Already in same batch
+    // -----------------------
+    if (batch.students.some((id) => id.toString() === student._id.toString())) {
       await session.abortTransaction();
 
       return res.status(409).json({
         success: false,
-        message: "Student is already added to this batch.",
+        message: `${student.fullName} is already added to this batch.`,
       });
     }
 
-    // Check another batch of SAME course
+    // -----------------------
+    // Already exists in another batch
+    // of SAME COURSE
+    // -----------------------
     const existingBatch = await Batch.findOne({
       _id: { $ne: batch._id },
-      course: batch.course,
-      students: studentId,
+      course: batch.course._id,
+      students: student._id,
     }).session(session);
 
-    if (existingBatch && forceMove !== true) {
+    if (existingBatch && !forceMove) {
       await session.abortTransaction();
 
       return res.status(409).json({
         success: false,
         requiresConfirmation: true,
-        message: `Student is already in batch "${existingBatch.name}". Do you want to move the student to "${batch.name}"?`,
+        message: "Student is already assigned to another batch of this course.",
         data: {
+          studentName: student.fullName,
+          mobileNumber: student.mobileNumber,
+          courseName: batch.course.name,
           currentBatchId: existingBatch._id,
           currentBatchName: existingBatch.name,
           targetBatchId: batch._id,
@@ -685,20 +699,24 @@ export const addStudentToBatch = async (req, res) => {
       });
     }
 
+    // -----------------------
     // Capacity check
+    // -----------------------
     if (batch.students.length >= batch.capacity) {
       await session.abortTransaction();
 
       return res.status(400).json({
         success: false,
-        message: "Target batch is already full.",
+        message: "Batch is already full.",
       });
     }
 
-    // Remove from previous batch after confirmation
-    if (existingBatch && forceMove === true) {
+    // -----------------------
+    // Move Student
+    // -----------------------
+    if (existingBatch && forceMove) {
       existingBatch.students = existingBatch.students.filter(
-        (id) => id.toString() !== studentId.toString(),
+        (id) => id.toString() !== student._id.toString(),
       );
 
       existingBatch.enrolledStudents = existingBatch.students.length;
@@ -706,13 +724,17 @@ export const addStudentToBatch = async (req, res) => {
       await existingBatch.save({ session });
     }
 
-    // Add to target batch
-    batch.students.push(studentId);
+    // -----------------------
+    // Add Student
+    // -----------------------
+    batch.students.push(student._id);
     batch.enrolledStudents = batch.students.length;
 
     await batch.save({ session });
 
-    // Update enrollment batch reference
+    // -----------------------
+    // Update enrollment batch
+    // -----------------------
     enrollment.batchId = batch._id;
     await enrollment.save({ session });
 
@@ -721,24 +743,27 @@ export const addStudentToBatch = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: existingBatch
-        ? "Student moved to new batch successfully."
-        : "Student added to batch successfully.",
+        ? "Student moved successfully."
+        : "Student added successfully.",
       data: {
         studentId: student._id,
-        batchId: batch._id,
+        studentName: student.fullName,
+        mobileNumber: student.mobileNumber,
+        courseName: batch.course.name,
+        batchName: batch.name,
       },
     });
   } catch (error) {
     await session.abortTransaction();
 
-    console.error("Add student to batch error:", error);
+    console.error(error);
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Internal server error.",
+      message: "Internal server error.",
     });
   } finally {
-    await session.endSession();
+    session.endSession();
   }
 };
 
@@ -749,11 +774,31 @@ export const addStudentToBatch = async (req, res) => {
 export const toggleBatchStatus = async (req, res) => {
   try {
     const { id } = req.params;
+    let { status } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid batch ID.",
+      });
+    }
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: "Status is required.",
+      });
+    }
+
+    // frontend ACTIVE, active, Active sab bhej sakta hai
+    status = status.toUpperCase().trim();
+
+    const allowedStatus = ["ACTIVE", "INACTIVE", "COMPLETED"];
+
+    if (!allowedStatus.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be ACTIVE, INACTIVE or COMPLETED.",
       });
     }
 
@@ -766,27 +811,28 @@ export const toggleBatchStatus = async (req, res) => {
       });
     }
 
-    if (batch.status === "COMPLETED") {
+    // Already same status
+    if (batch.status === status) {
       return res.status(400).json({
         success: false,
-        message: "Completed batch cannot be toggled.",
+        message: `Batch is already ${status}.`,
       });
     }
 
-    batch.status = batch.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    batch.status = status;
 
     await batch.save();
 
     return res.status(200).json({
       success: true,
-      message: `Batch status changed to ${batch.status}.`,
+      message: `Batch status updated to ${status}.`,
       data: {
         _id: batch._id,
         status: batch.status,
       },
     });
   } catch (error) {
-    console.error("Toggle batch status error:", error);
+    console.error("Update batch status error:", error);
 
     return res.status(500).json({
       success: false,
