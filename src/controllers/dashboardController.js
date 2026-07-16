@@ -107,7 +107,3 @@ export const getTopPopularCourses = async (req, res) => {
     });
   }
 };
-
-module.exports={
-    getTopPopularCourses
-}

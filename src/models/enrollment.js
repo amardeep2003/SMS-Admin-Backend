@@ -13,8 +13,7 @@ const paymentHistorySchema = new mongoose.Schema(
       required: [true, "Payment type is required."],
       enum: {
         values: ["REGISTRATION_FEE", "COURSE_FEE"],
-        message:
-          "Payment type must be REGISTRATION_FEE or COURSE_FEE.",
+        message: "Payment type must be REGISTRATION_FEE or COURSE_FEE.",
       },
       uppercase: true,
       trim: true,
@@ -114,8 +113,7 @@ const enrollmentSchema = new mongoose.Schema(
       required: [true, "Payment status is required."],
       enum: {
         values: ["UNPAID", "PARTIALLY_PAID", "PAID"],
-        message:
-          "Payment status must be UNPAID, PARTIALLY_PAID, or PAID.",
+        message: "Payment status must be UNPAID, PARTIALLY_PAID, or PAID.",
       },
       default: "UNPAID",
     },
@@ -124,6 +122,13 @@ const enrollmentSchema = new mongoose.Schema(
     payments: {
       type: [paymentHistorySchema],
       default: [],
+    },
+
+    affiliatePartner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AffiliatePartner",
+      default: null,
+      index: true,
     },
 
     enrollmentDate: {
@@ -135,8 +140,7 @@ const enrollmentSchema = new mongoose.Schema(
       type: String,
       enum: {
         values: ["ACTIVE", "COMPLETED", "DROPPED"],
-        message:
-          "Enrollment status must be ACTIVE, COMPLETED, or DROPPED.",
+        message: "Enrollment status must be ACTIVE, COMPLETED, or DROPPED.",
       },
       default: "ACTIVE",
     },
@@ -192,8 +196,7 @@ enrollmentSchema.pre("validate", function () {
     );
   }
 
-  const expectedRemainingAmount =
-    this.courseTotalFee - this.totalPaidAmount;
+  const expectedRemainingAmount = this.courseTotalFee - this.totalPaidAmount;
 
   if (this.remainingAmount !== expectedRemainingAmount) {
     throw new Error(
