@@ -265,23 +265,37 @@ export const deleteAffiliatePartner = async (req, res) => {
   }
 };
 
+// /api/affiliate?sortBy=totalRevenue&sortOrder=desc
 export const getAllAffiliatePartners = async (req, res) => {
   try {
-    let {
-      page = 1,
-      limit = 10,
-      search = "",
-      year = new Date().getFullYear(),
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = req.query;
+    // let {
+    //   page = 1,
+    //   limit = 10,
+    //   search = "",
+    //   year = new Date().getFullYear(),
+    //   sortBy = "createdAt",
+    //   sortOrder = "desc",
+    // } = req.query;
 
-    page = Math.max(parseInt(page) || 1, 1);
-    limit = Math.max(parseInt(limit) || 10, 1);
+    let page = Number(req.query.page) || 1;
+    let limit = Number(req.query.limit) || 10;
+
+    const search = req.query.search?.trim() || "";
+
+    let year = Number(req.query.year) || new Date().getFullYear();
+
+    let sortBy = req.query.sortBy || "createdAt";
+    let sortOrder = req.query.sortOrder || "desc";
+
+    if (!["createdAt", "totalCourseSold", "totalRevenue"].includes(sortBy)) {
+      sortBy = "createdAt";
+    }
+
+    if (!["asc", "desc"].includes(sortOrder)) {
+      sortOrder = "desc";
+    }
 
     const skip = (page - 1) * limit;
-
-    year = parseInt(year);
 
     const startDate = new Date(`${year}-01-01T00:00:00.000Z`);
     const endDate = new Date(`${year}-12-31T23:59:59.999Z`);
@@ -323,7 +337,7 @@ export const getAllAffiliatePartners = async (req, res) => {
             {
               $match: {
                 $expr: {
-                  $eq: ["$affiliatePartnerId", "$$affiliateId"],
+                  $eq: ["$affiliatePartner", "$$affiliateId"],
                 },
                 enrollmentDate: {
                   $gte: startDate,
@@ -331,43 +345,17 @@ export const getAllAffiliatePartners = async (req, res) => {
                 },
               },
             },
-
-            {
-              $lookup: {
-                from: "courses",
-                localField: "courseId",
-                foreignField: "_id",
-                as: "course",
-              },
-            },
-
-            {
-              $unwind: {
-                path: "$course",
-                preserveNullAndEmptyArrays: true,
-              },
-            },
-
-            {
-              $project: {
-                sellingPrice: {
-                  $ifNull: ["$course.discountedPrice", "$course.actualPrice"],
-                },
-              },
-            },
           ],
           as: "sales",
         },
       },
-
       {
         $addFields: {
           totalCourseSold: {
             $size: "$sales",
           },
-
           totalRevenue: {
-            $sum: "$sales.sellingPrice",
+            $sum: "$sales.courseTotalFee",
           },
         },
       },
@@ -429,6 +417,171 @@ export const getAllAffiliatePartners = async (req, res) => {
     });
   } catch (error) {
     console.error("Get affiliate partners error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+// /api/affiliate/:id?year=2026
+
+export const getAffiliatePartnerById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid affiliate partner ID.",
+      });
+    }
+
+    // let { year = new Date().getFullYear() } = req.query;
+
+    // year = parseInt(year);
+
+    // const startDate = new Date(`${year}-01-01T00:00:00.000Z`);
+    // const endDate = new Date(`${year}-12-31T23:59:59.999Z`);
+
+    const currentDate = new Date();
+
+    // Year
+    let year = Number(req.query.year);
+
+    if (isNaN(year)) {
+      year = currentDate.getFullYear();
+    }
+
+    // Month
+    let month = Number(req.query.month);
+
+    if (isNaN(month) || month < 1 || month > 12) {
+      month = currentDate.getMonth() + 1;
+    }
+
+    // Selected month's first day
+    const startDate = new Date(year, month - 1, 1);
+
+    // Selected month's last day
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const affiliate = await AffiliatePartner.findById(id).lean();
+
+    if (!affiliate) {
+      return res.status(404).json({
+        success: false,
+        message: "Affiliate partner not found.",
+      });
+    }
+
+    const enrollments = await Enrollment.find({
+      affiliatePartner: id,
+      enrollmentDate: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    })
+      .populate({
+        path: "studentId",
+        select: "fullName mobileNumber",
+      })
+      .populate({
+        path: "courseId",
+        select: "name type actualPrice discountedPrice",
+      })
+      .sort({
+        enrollmentDate: -1,
+      })
+      .lean();
+
+    const courseList = enrollments.map((item) => ({
+      enrollmentId: item._id,
+
+      studentId: item.studentId?._id,
+
+      studentName: item.studentId?.fullName || "",
+
+      mobileNumber: item.studentId?.mobileNumber || "",
+
+      courseId: item.courseId?._id,
+
+      courseName: item.courseId?.name || "",
+
+      courseType: item.courseId?.type || "",
+
+      sellingPrice:
+        item.courseId?.discountedPrice ?? item.courseId?.actualPrice ?? 0,
+
+      paymentStatus: item.paymentStatus,
+
+      totalPaidAmount: item.totalPaidAmount,
+
+      remainingAmount: item.remainingAmount,
+
+      enrollmentDate: item.enrollmentDate,
+    }));
+
+    const totalCourseSold = courseList.length;
+
+    const totalRevenue = courseList.reduce(
+      (sum, item) => sum + item.sellingPrice,
+      0,
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Affiliate partner fetched successfully.",
+
+      data: {
+        affiliate: {
+          _id: affiliate._id,
+          fullName: affiliate.fullName,
+          mobileNumber: affiliate.mobileNumber,
+          email: affiliate.email,
+          address: affiliate.address,
+          status: affiliate.status,
+        },
+
+        summary: {
+          year,
+          totalCourseSold,
+          totalRevenue,
+        },
+
+        courses: courseList,
+      },
+    });
+  } catch (error) {
+    console.error("Get affiliate partner by id error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const getActiveAffiliatePartnersDropdown = async (req, res) => {
+  try {
+    const affiliates = await AffiliatePartner.find({
+      status: "ACTIVE",
+    })
+      .select("_id fullName")
+      .sort({ fullName: 1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      message: "Active affiliate partners fetched successfully.",
+      data: affiliates,
+    });
+  } catch (error) {
+    console.error(
+      "Get active affiliate partners dropdown error:",
+      error.message,
+    );
 
     return res.status(500).json({
       success: false,

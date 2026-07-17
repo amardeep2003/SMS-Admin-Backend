@@ -6,6 +6,8 @@ import {
   updateAffiliatePartner,
   deleteAffiliatePartner,
   getAllAffiliatePartners,
+  getAffiliatePartnerById,
+  getActiveAffiliatePartnersDropdown
 } from "../controllers/affiliateController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -24,5 +26,8 @@ router.delete("/:id", deleteAffiliatePartner);
 
 router.get("/get/all", getAllAffiliatePartners);
 
+router.get("/:id/single", getAffiliatePartnerById);
+
+router.get("/dropdown", getActiveAffiliatePartnersDropdown);
 
 export default router;

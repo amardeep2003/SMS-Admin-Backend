@@ -1,5 +1,6 @@
 import Enrollment from "../models/enrollment.js";
 import mongoose from "mongoose";
+import AffiliatePartner from "../models/affiliate.js";
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -26,16 +27,26 @@ export const getAllEnrollments = async (req, res) => {
     // -----------------------------
     // Course type validation
     // -----------------------------
+    // let normalizedCourseType = null;
+
+    // if (courseType) {
+    //   normalizedCourseType = courseType.trim().toUpperCase();
+
+    //   if (!["VT", "LT"].includes(normalizedCourseType)) {
+    //     return res.status(400).json({
+    //       success: false,
+    //       message: "Course type must be either VT or LT.",
+    //     });
+    //   }
+    // }
+
     let normalizedCourseType = null;
 
-    if (courseType) {
-      normalizedCourseType = courseType.trim().toUpperCase();
+    if (req.query.courseType?.trim()) {
+      const value = req.query.courseType.trim().toUpperCase();
 
-      if (!["VT", "LT"].includes(normalizedCourseType)) {
-        return res.status(400).json({
-          success: false,
-          message: "Course type must be either VT or LT.",
-        });
+      if (["VT", "LT"].includes(value)) {
+        normalizedCourseType = value;
       }
     }
 
@@ -209,6 +220,79 @@ export const getAllEnrollments = async (req, res) => {
     });
   } catch (error) {
     console.error("Get all enrollments error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const updateEnrollmentAffiliatePartner = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { affiliatePartner } = req.body;
+
+    // Enrollment ID validation
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid enrollment ID.",
+      });
+    }
+
+    // Affiliate validation (allow null also)
+    if (
+      affiliatePartner !== null &&
+      affiliatePartner !== undefined &&
+      !mongoose.Types.ObjectId.isValid(affiliatePartner)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid affiliate partner ID.",
+      });
+    }
+
+    const enrollment = await Enrollment.findById(id);
+
+    if (!enrollment) {
+      return res.status(404).json({
+        success: false,
+        message: "Enrollment not found.",
+      });
+    }
+
+    // If affiliate is provided then verify it exists and is ACTIVE
+    if (affiliatePartner) {
+      const affiliate = await AffiliatePartner.findOne({
+        _id: affiliatePartner,
+        status: "ACTIVE",
+      });
+
+      if (!affiliate) {
+        return res.status(404).json({
+          success: false,
+          message: "Active affiliate partner not found.",
+        });
+      }
+    }
+
+    enrollment.affiliatePartner = affiliatePartner || null;
+
+    await enrollment.save();
+
+    return res.status(200).json({
+      success: true,
+      message: affiliatePartner
+        ? "Affiliate partner updated successfully."
+        : "Affiliate partner removed successfully.",
+      data: {
+        enrollmentId: enrollment._id,
+        affiliatePartner: enrollment.affiliatePartner,
+      },
+    });
+  } catch (error) {
+    console.error("Update enrollment affiliate error:", error);
 
     return res.status(500).json({
       success: false,
