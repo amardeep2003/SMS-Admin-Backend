@@ -43,6 +43,10 @@ app.get("/api", (req, res) => {
   res.json({ message: "MERN backend is running" });
 });
 
+app.get("/test",(req,res)=>{
+  res.send("Api is running.......")
+})
+
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
