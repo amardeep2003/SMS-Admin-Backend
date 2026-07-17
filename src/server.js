@@ -18,9 +18,25 @@ import affiliateRoutes from "./routes/affiliateRoutes.js";
 dotenv.config();
 validateEnv();
 
+const allowedOrigins = ["http://localhost:5173", process.env.CLIENT_URL];
+
 const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
@@ -43,9 +59,9 @@ app.get("/api", (req, res) => {
   res.json({ message: "MERN backend is running" });
 });
 
-app.get("/test",(req,res)=>{
-  res.send("Api is running.......")
-})
+app.get("/test", (req, res) => {
+  res.send("Api is running.......");
+});
 
 const PORT = process.env.PORT || 5000;
 
