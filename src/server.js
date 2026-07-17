@@ -15,7 +15,6 @@ import batchRoutes from "./routes/batchRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import affiliateRoutes from "./routes/affiliateRoutes.js";
 
-
 dotenv.config();
 validateEnv();
 
@@ -23,6 +22,9 @@ const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+
 app.use(cookieParser());
 
 // Routes
@@ -36,8 +38,6 @@ app.use("/api/enrollments", enrollmentRoutes);
 app.use("/api/batch", batchRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/affiliate", affiliateRoutes);
-
-
 
 app.get("/api", (req, res) => {
   res.json({ message: "MERN backend is running" });
