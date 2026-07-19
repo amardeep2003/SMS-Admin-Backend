@@ -4,7 +4,10 @@ import {
   login,
   refresh,
   logout,
-  getMe,
+  // getMe,
+  getProfile,
+  updateProfile,
+  changePassword,
 } from "../controllers/authController.js";
 import protect from "../middleware/authMiddleware.js";
 
@@ -14,6 +17,12 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/refresh", refresh);
 router.post("/logout", logout);
-router.get("/me", protect, getMe);
+// router.get("/me", protect, getMe);
+
+router.get("/profile", protect, getProfile);
+
+router.put("/profile", protect, updateProfile);
+
+router.put("/change-password", protect, changePassword);
 
 export default router;

@@ -6,6 +6,7 @@ import {
   updateBatch,
   addStudentToBatch,
   toggleBatchStatus,
+  addBatch
 } from "../controllers/batchController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -13,6 +14,8 @@ import protect from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 router.use(protect);
+
+router.post("/", addBatch);
 
 router.get("/", getAllBatches);
 

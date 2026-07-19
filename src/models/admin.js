@@ -11,6 +11,17 @@ const adminSchema = new mongoose.Schema(
       maxlength: [100, "Name cannot exceed 100 characters"],
     },
 
+    phone: {
+      type: String,
+      required: [true, "Phone number is required"],
+      unique: true,
+      trim: true,
+      match: [
+        /^[6-9]\d{9}$/,
+        "Please provide a valid 10-digit Indian mobile number.",
+      ],
+    },
+
     email: {
       type: String,
       required: [true, "Email is required"],
@@ -44,7 +55,7 @@ const adminSchema = new mongoose.Schema(
   {
     timestamps: true,
     versionKey: false,
-  }
+  },
 );
 
 // Hash password before saving

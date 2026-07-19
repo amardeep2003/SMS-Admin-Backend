@@ -41,7 +41,7 @@ const clearRefreshTokenCookie = (res) => {
  */
 export const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body || {};
+    const { name, email, phone, password } = req.body || {};
 
     // Validate request body types
     if (
@@ -64,6 +64,31 @@ export const register = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Name is required.",
+      });
+    }
+
+    if (!phone?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required.",
+      });
+    }
+
+    if (!/^[6-9]\d{9}$/.test(phone.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid 10-digit Indian mobile number.",
+      });
+    }
+
+    const phoneExists = await Admin.findOne({
+      phone: phone.trim(),
+    });
+
+    if (phoneExists) {
+      return res.status(409).json({
+        success: false,
+        message: "Phone number already exists.",
       });
     }
 
@@ -110,6 +135,7 @@ export const register = async (req, res) => {
     // Create admin
     const admin = await Admin.create({
       name: trimmedName,
+      phone: phone.trim(),
       email: trimmedEmail,
       password: trimmedPassword,
     });
@@ -195,7 +221,7 @@ export const login = async (req, res) => {
 
     // Find admin with password field included
     const admin = await Admin.findOne({ email: trimmedEmail }).select(
-      "+password +refreshTokenHash"
+      "+password +refreshTokenHash",
     );
 
     // Generic error for wrong email or wrong password
@@ -382,18 +408,156 @@ export const logout = async (req, res) => {
  * Get current authenticated admin's profile.
  * Protected by auth middleware — req.admin is guaranteed.
  */
-export const getMe = async (req, res) => {
+// export const getMe = async (req, res) => {
+//   try {
+//     return res.status(200).json({
+//       success: true,
+//       admin: {
+//         id: req.admin._id,
+//         name: req.admin.name,
+//         email: req.admin.email,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("GetMe error:", error.message);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error.",
+//     });
+//   }
+// };
+
+export const getProfile = async (req, res) => {
   try {
+    const admin = await Admin.findById(req.admin._id).select(
+      "name email phone",
+    );
+
     return res.status(200).json({
       success: true,
-      admin: {
-        id: req.admin._id,
-        name: req.admin.name,
-        email: req.admin.email,
-      },
+      data: admin,
     });
   } catch (error) {
-    console.error("GetMe error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, email, phone } = req.body;
+
+    const admin = await Admin.findById(req.admin._id);
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    if (email) {
+      const emailExists = await Admin.findOne({
+        email: email.trim().toLowerCase(),
+        _id: { $ne: admin._id },
+      });
+
+      if (emailExists) {
+        return res.status(409).json({
+          success: false,
+          message: "Email already exists.",
+        });
+      }
+    }
+
+    if (phone) {
+      if (!/^[6-9]\d{9}$/.test(phone.trim())) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide a valid 10-digit Indian mobile number.",
+        });
+      }
+
+      const phoneExists = await Admin.findOne({
+        phone: phone.trim(),
+        _id: { $ne: admin._id },
+      });
+
+      if (phoneExists) {
+        return res.status(409).json({
+          success: false,
+          message: "Phone number already exists.",
+        });
+      }
+    }
+
+    admin.name = name ?? admin.name;
+    admin.email = email?.trim().toLowerCase() ?? admin.email;
+    admin.phone = phone?.trim() ?? admin.phone;
+
+    await admin.save({
+      validateBeforeSave: false,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "All password fields are required.",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters.",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match.",
+      });
+    }
+
+    const admin = await Admin.findById(req.admin._id).select("+password");
+
+    const isMatched = await admin.comparePassword(currentPassword);
+
+    if (!isMatched) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is incorrect.",
+      });
+    }
+
+    admin.password = newPassword;
+
+    await admin.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully.",
+    });
+  } catch (error) {
     return res.status(500).json({
       success: false,
       message: "Internal server error.",
