@@ -6,6 +6,12 @@ import {
   hashToken,
 } from "../utils/tokenUtils.js";
 
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
+
+import AdminOtp from "../models/adminOtp.js";
+import  sendOtpSms  from "../services/smsService.js";
+
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -33,6 +39,18 @@ const clearRefreshTokenCookie = (res) => {
     maxAge: 0,
     path: "/",
   });
+};
+
+const generateResetToken = (phone) => {
+  return jwt.sign(
+    {
+      phone,
+    },
+    process.env.FORGOT_PASSWORD_SECRET,
+    {
+      expiresIn: process.env.RESET_TOKEN_EXPIRE || "10m",
+    },
+  );
 };
 
 /**
@@ -558,6 +576,455 @@ export const changePassword = async (req, res) => {
       message: "Password changed successfully.",
     });
   } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const forgotPasswordSendOtp = async (req, res) => {
+  try {
+    const { phone } = req.body;
+
+    // -------------------------
+    // Phone Validation
+    // -------------------------
+    if (!phone || typeof phone !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required.",
+      });
+    }
+
+    const trimmedPhone = phone.trim();
+
+    if (!/^[6-9]\d{9}$/.test(trimmedPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid 10-digit Indian mobile number.",
+      });
+    }
+
+    // -------------------------
+    // Find Admin
+    // -------------------------
+    const admin = await Admin.findOne({
+      phone: trimmedPhone,
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "No admin found with this phone number.",
+      });
+    }
+
+    // -------------------------
+    // Admin Active Check
+    // -------------------------
+    if (!admin.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Admin account is inactive.",
+      });
+    }
+
+    // -------------------------
+    // Generate OTP
+    // -------------------------
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // console.log(otp, "otp created")
+
+    const sessionId = `ses_${crypto.randomUUID()}`;
+
+    // -------------------------
+    // Save / Update OTP
+    // -------------------------
+    await AdminOtp.findOneAndUpdate(
+      {
+        phone: trimmedPhone,
+      },
+      {
+        phone: trimmedPhone,
+        otp,
+        sessionId,
+        attempts: 0,
+        isVerified: false,
+        expiresAt: new Date(
+          Date.now() +
+            (Number(process.env.OTP_EXPIRE_MINUTES) || 5) * 60 * 1000,
+        ),
+      },
+      {
+        upsert: true,
+        new: true,
+      },
+    );
+
+    // -------------------------
+    // Send SMS
+    // -------------------------
+    await sendOtpSms(trimmedPhone, otp);
+
+    // console.log(trimmedPhone, otp , "otp send to sms service ")
+
+    // -------------------------
+    // Generate Reset Token
+    // -------------------------
+    const token = generateResetToken(trimmedPhone);
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent successfully.",
+      token,
+      expiresIn: process.env.RESET_TOKEN_EXPIRE || "10m",
+    });
+  } catch (error) {
+    console.error("Forgot Password Send OTP Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const verifyForgotPasswordOtp = async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
+
+    // const authHeader = req.headers.authorization;
+
+    // if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    //   return res.status(401).json({
+    //     success: false,
+    //     message: "Authorization token is required.",
+    //   });
+    // }
+
+    // const token = authHeader.split(" ")[1];
+    // -------------------------
+    // Required Fields
+    // -------------------------
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required.",
+      });
+    }
+
+    if (!otp) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP is required.",
+      });
+    }
+
+    // if (!token) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Token is required.",
+    //   });
+    // }
+
+    const trimmedPhone = phone.trim();
+
+    if (!/^[6-9]\d{9}$/.test(trimmedPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid 10-digit Indian mobile number.",
+      });
+    }
+
+    // -------------------------
+    // Verify Reset Token
+    // -------------------------
+    // let decoded;
+
+    // try {
+    //   decoded = jwt.verify(token, process.env.FORGOT_PASSWORD_SECRET);
+    // } catch (error) {
+    //   if (error.name === "TokenExpiredError") {
+    //     return res.status(401).json({
+    //       success: false,
+    //       message: "Reset token has expired.",
+    //     });
+    //   }
+
+    //   return res.status(401).json({
+    //     success: false,
+    //     message: "Invalid reset token.",
+    //   });
+    // }
+    const decoded = req.resetPassword;
+
+    // -------------------------
+    // Phone Match
+    // -------------------------
+    if (decoded.phone !== trimmedPhone) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token.",
+      });
+    }
+
+    // -------------------------
+    // Find OTP
+    // -------------------------
+    const otpRecord = await AdminOtp.findOne({
+      phone: trimmedPhone,
+    });
+
+    if (!otpRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "OTP not found. Please request a new OTP.",
+      });
+    }
+
+    // -------------------------
+    // Expired OTP
+    // -------------------------
+    if (otpRecord.expiresAt < new Date()) {
+      await AdminOtp.deleteOne({
+        _id: otpRecord._id,
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: "OTP has expired.",
+      });
+    }
+
+    // -------------------------
+    // Max Attempts
+    // -------------------------
+    if (otpRecord.attempts >= 5) {
+      await AdminOtp.deleteOne({
+        _id: otpRecord._id,
+      });
+
+      return res.status(429).json({
+        success: false,
+        message: "Maximum OTP attempts exceeded.",
+      });
+    }
+
+    // -------------------------
+    // OTP Match
+    // -------------------------
+    if (otpRecord.otp !== otp.trim()) {
+      otpRecord.attempts += 1;
+
+      await otpRecord.save();
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP.",
+      });
+    }
+
+    // -------------------------
+    // Already Verified
+    // -------------------------
+    if (otpRecord.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP has already been verified.",
+      });
+    }
+
+    // -------------------------
+    // Verify OTP
+    // -------------------------
+    otpRecord.isVerified = true;
+    otpRecord.attempts = 0;
+
+    await otpRecord.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP verified successfully.",
+    });
+  } catch (error) {
+    console.error("Verify Forgot Password OTP Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { phone, newPassword, confirmPassword } = req.body;
+
+    // -------------------------
+    // Authorization Header
+    // -------------------------
+
+    // const authHeader = req.headers.authorization;
+
+    // if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    //   return res.status(401).json({
+    //     success: false,
+    //     message: "Authorization token is required.",
+    //   });
+    // }
+
+    // const token = authHeader.split(" ")[1];
+
+    // -------------------------
+    // Required Fields
+    // -------------------------
+
+    if (!phone || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone, new password and confirm password are required.",
+      });
+    }
+
+    const trimmedPhone = phone.trim();
+
+    if (!/^[6-9]\d{9}$/.test(trimmedPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid 10-digit Indian mobile number.",
+      });
+    }
+
+    if (newPassword.trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters.",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Password and confirm password do not match.",
+      });
+    }
+
+    // -------------------------
+    // Verify Token
+    // -------------------------
+
+    // let decoded;
+
+    // try {
+    //   decoded = jwt.verify(token, process.env.FORGOT_PASSWORD_SECRET);
+    // } catch (error) {
+    //   if (error.name === "TokenExpiredError") {
+    //     return res.status(401).json({
+    //       success: false,
+    //       message: "Reset token has expired.",
+    //     });
+    //   }
+
+    //   return res.status(401).json({
+    //     success: false,
+    //     message: "Invalid reset token.",
+    //   });
+    // }
+
+    const decoded = req.resetPassword;
+
+    if (decoded.phone !== trimmedPhone) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token.",
+      });
+    }
+
+    // -------------------------
+    // OTP Verification Check
+    // -------------------------
+
+    const otpRecord = await AdminOtp.findOne({
+      phone: trimmedPhone,
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: "Please request a new OTP.",
+      });
+    }
+
+    if (!otpRecord.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Please verify OTP first.",
+      });
+    }
+
+    // -------------------------
+    // Find Admin
+    // -------------------------
+
+    const admin = await Admin.findOne({
+      phone: trimmedPhone,
+    }).select("+password +refreshTokenHash");
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    if (!admin.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Admin account is inactive.",
+      });
+    }
+
+    // Optional:
+    // Don't allow same password
+
+    const isSamePassword = await admin.comparePassword(newPassword);
+
+    if (isSamePassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password cannot be the same as the current password.",
+      });
+    }
+
+    // -------------------------
+    // Update Password
+    // -------------------------
+
+    admin.password = newPassword;
+
+    // logout from all devices
+
+    admin.refreshTokenHash = null;
+
+    await admin.save();
+
+    // -------------------------
+    // Delete OTP
+    // -------------------------
+
+    await AdminOtp.deleteOne({
+      _id: otpRecord._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successfully.",
+    });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Internal server error.",
