@@ -18,7 +18,7 @@ import affiliateRoutes from "./routes/affiliateRoutes.js";
 dotenv.config();
 validateEnv();
 
-const allowedOrigins = ["http://localhost:5173", process.env.CLIENT_URL];
+const allowedOrigins = ["http://localhost:5173","https://sms-lg.netlify.app", process.env.CLIENT_URL];
 
 const app = express();
 
