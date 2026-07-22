@@ -2,7 +2,232 @@ import Enrollment from "../models/enrollment.js";
 import mongoose from "mongoose";
 import AffiliatePartner from "../models/affiliate.js";
 
+
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// export const getAllEnrollments = async (req, res) => {
+//   try {
+//     let {
+//       page = 1,
+//       limit = 10,
+//       search = "",
+//       courseType,
+//       courseId,
+//       sortOrder = "desc",
+//     } = req.query;
+
+//     // -----------------------------
+//     // Pagination
+//     // -----------------------------
+//     page = Math.max(parseInt(page, 10) || 1, 1);
+//     limit = Math.max(parseInt(limit, 10) || 10, 1);
+//     limit = Math.min(limit, 100);
+
+//     const skip = (page - 1) * limit;
+
+//     // -----------------------------
+//     // Course type validation
+//     // -----------------------------
+//     // let normalizedCourseType = null;
+
+//     // if (courseType) {
+//     //   normalizedCourseType = courseType.trim().toUpperCase();
+
+//     //   if (!["VT", "LT"].includes(normalizedCourseType)) {
+//     //     return res.status(400).json({
+//     //       success: false,
+//     //       message: "Course type must be either VT or LT.",
+//     //     });
+//     //   }
+//     // }
+
+//     let normalizedCourseType = null;
+
+//     if (req.query.courseType?.trim()) {
+//       const value = req.query.courseType.trim().toUpperCase();
+
+//       if (["VT", "LT"].includes(value)) {
+//         normalizedCourseType = value;
+//       }
+//     }
+
+//     // -----------------------------
+//     // Course ID validation
+//     // -----------------------------
+//     if (courseId && !mongoose.Types.ObjectId.isValid(courseId)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid course ID.",
+//       });
+//     }
+
+//     // -----------------------------
+//     // Remaining amount sorting
+//     // asc  = lowest remaining first
+//     // desc = highest remaining first
+//     // -----------------------------
+//     const normalizedSortOrder = sortOrder.toLowerCase() === "asc" ? 1 : -1;
+
+//     // -----------------------------
+//     // Aggregation pipeline
+//     // -----------------------------
+//     const pipeline = [
+//       // Student lookup
+//       {
+//         $lookup: {
+//           from: "students",
+//           localField: "studentId",
+//           foreignField: "_id",
+//           as: "student",
+//         },
+//       },
+
+//       {
+//         $unwind: "$student",
+//       },
+
+//       // Course lookup
+//       {
+//         $lookup: {
+//           from: "courses",
+//           localField: "courseId",
+//           foreignField: "_id",
+//           as: "course",
+//         },
+//       },
+
+//       {
+//         $unwind: "$course",
+//       },
+//     ];
+
+//     // -----------------------------
+//     // Filters
+//     // -----------------------------
+//     const matchStage = {};
+
+//     if (normalizedCourseType) {
+//       matchStage["course.type"] = normalizedCourseType;
+//     }
+
+//     if (courseId) {
+//       matchStage.courseId = new mongoose.Types.ObjectId(courseId);
+//     }
+
+//     // -----------------------------
+//     // Search
+//     // -----------------------------
+//     if (typeof search === "string" && search.trim()) {
+//       const searchRegex = new RegExp(escapeRegex(search.trim()), "i");
+
+//       matchStage.$or = [
+//         {
+//           "student.fullName": searchRegex,
+//         },
+//         {
+//           "student.mobileNumber": searchRegex,
+//         },
+//         {
+//           "course.name": searchRegex,
+//         },
+//       ];
+//     }
+
+//     // Add filters after lookup
+//     if (Object.keys(matchStage).length > 0) {
+//       pipeline.push({
+//         $match: matchStage,
+//       });
+//     }
+
+//     // -----------------------------
+//     // Select required fields
+//     // -----------------------------
+//     pipeline.push({
+//       $project: {
+//         _id: 1,
+
+//         // Needed later but may remain hidden in UI
+//         studentId: "$student._id",
+//         courseId: "$course._id",
+
+//         studentName: "$student.fullName",
+//         mobileNumber: "$student.mobileNumber",
+
+//         courseName: "$course.name",
+//         courseType: "$course.type",
+
+//         totalFee: "$courseTotalFee",
+//         totalPaid: "$totalPaidAmount",
+//         remainingAmount: 1,
+
+//         paymentStatus: 1,
+//         status: 1,
+
+//         enrollmentDate: 1,
+//         createdAt: 1,
+//       },
+//     });
+
+//     // -----------------------------
+//     // Sorting + Pagination + Count
+//     // -----------------------------
+//     pipeline.push({
+//       $facet: {
+//         enrollments: [
+//           {
+//             $sort: {
+//               remainingAmount: normalizedSortOrder,
+//               _id: -1,
+//             },
+//           },
+//           {
+//             $skip: skip,
+//           },
+//           {
+//             $limit: limit,
+//           },
+//         ],
+
+//         totalCount: [
+//           {
+//             $count: "count",
+//           },
+//         ],
+//       },
+//     });
+
+//     const result = await Enrollment.aggregate(pipeline);
+
+//     const enrollments = result[0]?.enrollments || [];
+
+//     const totalEnrollments = result[0]?.totalCount?.[0]?.count || 0;
+
+//     const totalPages = Math.ceil(totalEnrollments / limit);
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Enrollments fetched successfully.",
+//       data: enrollments,
+
+//       pagination: {
+//         currentPage: page,
+//         totalPages,
+//         totalEnrollments,
+//         limit,
+//         hasNextPage: page < totalPages,
+//         hasPreviousPage: page > 1,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Get all enrollments error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error.",
+//     });
+//   }
+// };
 
 export const getAllEnrollments = async (req, res) => {
   try {
@@ -10,49 +235,47 @@ export const getAllEnrollments = async (req, res) => {
       page = 1,
       limit = 10,
       search = "",
+
       courseType,
       courseId,
-      sortOrder = "desc",
+
+      paymentStatus,
+      enrollmentStatus,
+
+      studentNameSort,
+      remainingAmountSort,
+      enrollmentDateSort,
     } = req.query;
 
-    // -----------------------------
+    // -------------------------
     // Pagination
-    // -----------------------------
+    // -------------------------
+
     page = Math.max(parseInt(page, 10) || 1, 1);
     limit = Math.max(parseInt(limit, 10) || 10, 1);
     limit = Math.min(limit, 100);
 
     const skip = (page - 1) * limit;
 
-    // -----------------------------
-    // Course type validation
-    // -----------------------------
-    // let normalizedCourseType = null;
-
-    // if (courseType) {
-    //   normalizedCourseType = courseType.trim().toUpperCase();
-
-    //   if (!["VT", "LT"].includes(normalizedCourseType)) {
-    //     return res.status(400).json({
-    //       success: false,
-    //       message: "Course type must be either VT or LT.",
-    //     });
-    //   }
-    // }
+    // -------------------------
+    // Validation
+    // -------------------------
 
     let normalizedCourseType = null;
 
-    if (req.query.courseType?.trim()) {
-      const value = req.query.courseType.trim().toUpperCase();
+    if (courseType?.trim()) {
+      const value = courseType.trim().toUpperCase();
 
-      if (["VT", "LT"].includes(value)) {
-        normalizedCourseType = value;
+      if (!["VT", "LT"].includes(value)) {
+        return res.status(400).json({
+          success: false,
+          message: "Course type must be VT or LT.",
+        });
       }
+
+      normalizedCourseType = value;
     }
 
-    // -----------------------------
-    // Course ID validation
-    // -----------------------------
     if (courseId && !mongoose.Types.ObjectId.isValid(courseId)) {
       return res.status(400).json({
         success: false,
@@ -60,18 +283,41 @@ export const getAllEnrollments = async (req, res) => {
       });
     }
 
-    // -----------------------------
-    // Remaining amount sorting
-    // asc  = lowest remaining first
-    // desc = highest remaining first
-    // -----------------------------
-    const normalizedSortOrder = sortOrder.toLowerCase() === "asc" ? 1 : -1;
+    let normalizedPaymentStatus = null;
 
-    // -----------------------------
-    // Aggregation pipeline
-    // -----------------------------
+    if (paymentStatus?.trim()) {
+      const value = paymentStatus.trim().toUpperCase();
+
+      if (!["UNPAID", "PARTIALLY_PAID", "PAID"].includes(value)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid payment status.",
+        });
+      }
+
+      normalizedPaymentStatus = value;
+    }
+
+    let normalizedEnrollmentStatus = null;
+
+    if (enrollmentStatus?.trim()) {
+      const value = enrollmentStatus.trim().toUpperCase();
+
+      if (!["ACTIVE", "COMPLETED", "DROPPED"].includes(value)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid enrollment status.",
+        });
+      }
+
+      normalizedEnrollmentStatus = value;
+    }
+
+    // -------------------------
+    // Aggregation
+    // -------------------------
+
     const pipeline = [
-      // Student lookup
       {
         $lookup: {
           from: "students",
@@ -80,12 +326,9 @@ export const getAllEnrollments = async (req, res) => {
           as: "student",
         },
       },
-
       {
         $unwind: "$student",
       },
-
-      // Course lookup
       {
         $lookup: {
           from: "courses",
@@ -94,91 +337,130 @@ export const getAllEnrollments = async (req, res) => {
           as: "course",
         },
       },
-
       {
         $unwind: "$course",
       },
+      {
+        $lookup: {
+          from: "batches",
+          localField: "batchId",
+          foreignField: "_id",
+          as: "batch",
+        },
+      },
+      {
+        $unwind: "$batch",
+      },
     ];
 
-    // -----------------------------
-    // Filters
-    // -----------------------------
-    const matchStage = {};
+    // -------------------------
+    // Match
+    // -------------------------
+
+    const match = {};
 
     if (normalizedCourseType) {
-      matchStage["course.type"] = normalizedCourseType;
+      match["course.type"] = normalizedCourseType;
     }
 
     if (courseId) {
-      matchStage.courseId = new mongoose.Types.ObjectId(courseId);
+      match.courseId = new mongoose.Types.ObjectId(courseId);
     }
 
-    // -----------------------------
-    // Search
-    // -----------------------------
-    if (typeof search === "string" && search.trim()) {
-      const searchRegex = new RegExp(escapeRegex(search.trim()), "i");
+    if (normalizedPaymentStatus) {
+      match.paymentStatus = normalizedPaymentStatus;
+    }
 
-      matchStage.$or = [
+    if (normalizedEnrollmentStatus) {
+      match.status = normalizedEnrollmentStatus;
+    }
+
+    if (search.trim()) {
+      const regex = new RegExp(escapeRegex(search.trim()), "i");
+
+      match.$or = [
         {
-          "student.fullName": searchRegex,
+          "student.fullName": regex,
         },
         {
-          "student.mobileNumber": searchRegex,
+          "student.mobileNumber": regex,
         },
         {
-          "course.name": searchRegex,
+          "course.name": regex,
         },
       ];
     }
 
-    // Add filters after lookup
-    if (Object.keys(matchStage).length > 0) {
+    if (Object.keys(match).length) {
       pipeline.push({
-        $match: matchStage,
+        $match: match,
       });
     }
 
-    // -----------------------------
-    // Select required fields
-    // -----------------------------
+    // -------------------------
+    // Projection
+    // -------------------------
+
     pipeline.push({
       $project: {
         _id: 1,
 
-        // Needed later but may remain hidden in UI
         studentId: "$student._id",
-        courseId: "$course._id",
-
         studentName: "$student.fullName",
         mobileNumber: "$student.mobileNumber",
 
+        courseId: "$course._id",
         courseName: "$course.name",
         courseType: "$course.type",
 
-        totalFee: "$courseTotalFee",
-        totalPaid: "$totalPaidAmount",
+        batchId: "$batch._id",
+        batchName: "$batch.name",
+
+        courseTotalFee: 1,
+        registrationFeeAmount: 1,
+        totalPaidAmount: 1,
         remainingAmount: 1,
 
         paymentStatus: 1,
-        status: 1,
+        enrollmentStatus: "$status",
 
         enrollmentDate: 1,
         createdAt: 1,
       },
     });
 
-    // -----------------------------
-    // Sorting + Pagination + Count
-    // -----------------------------
+    // -------------------------
+    // Sorting
+    // -------------------------
+
+    const sort = {};
+
+    if (studentNameSort) {
+      sort.studentName = studentNameSort.toLowerCase() === "asc" ? 1 : -1;
+    }
+
+    if (remainingAmountSort) {
+      sort.remainingAmount =
+        remainingAmountSort.toLowerCase() === "asc" ? 1 : -1;
+    }
+
+    if (enrollmentDateSort) {
+      sort.enrollmentDate = enrollmentDateSort.toLowerCase() === "asc" ? 1 : -1;
+    }
+
+    if (!Object.keys(sort).length) {
+      sort.createdAt = -1;
+    }
+
+    // -------------------------
+    // Pagination
+    // -------------------------
+
     pipeline.push({
       $facet: {
         enrollments: [
           {
-            $sort: {
-              remainingAmount: normalizedSortOrder,
-              _id: -1,
-            },
+            $sort: sort,
           },
           {
             $skip: skip,
@@ -198,9 +480,9 @@ export const getAllEnrollments = async (req, res) => {
 
     const result = await Enrollment.aggregate(pipeline);
 
-    const enrollments = result[0]?.enrollments || [];
+    const enrollments = result[0].enrollments;
 
-    const totalEnrollments = result[0]?.totalCount?.[0]?.count || 0;
+    const totalEnrollments = result[0].totalCount[0]?.count || 0;
 
     const totalPages = Math.ceil(totalEnrollments / limit);
 
@@ -219,7 +501,7 @@ export const getAllEnrollments = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get all enrollments error:", error);
+    console.error(error);
 
     return res.status(500).json({
       success: false,
@@ -227,6 +509,101 @@ export const getAllEnrollments = async (req, res) => {
     });
   }
 };
+
+// page
+// Type: Number
+// Options:
+// - 1
+// - 2
+// - 3
+// - Any positive integer
+// Default: 1
+
+// --------------------------------------------------
+
+// limit
+// Type: Number
+// Options:
+// - 10
+// - 20
+// - 50
+// - 100
+// - Any value between 1 to 100
+// Default: 10
+
+// --------------------------------------------------
+
+// search
+// Type: String
+// Searches By:
+// - Student Name
+// - Mobile Number
+// - Course Name
+
+// Example:
+// - Rahul
+// - Aman
+// - 9876543210
+// - MERN
+// - Java
+
+// --------------------------------------------------
+
+// courseType
+// Type: String
+// Options:
+// - VT
+// - LT
+
+// --------------------------------------------------
+
+// courseId
+// Type: ObjectId
+
+// Example:
+// - 6870b8b99d3b74dc2babc123
+
+// --------------------------------------------------
+
+// paymentStatus
+// Type: String
+// Options:
+// - UNPAID
+// - PARTIALLY_PAID
+// - PAID
+
+// --------------------------------------------------
+
+// enrollmentStatus
+// Type: String
+// Options:
+// - ACTIVE
+// - COMPLETED
+// - DROPPED
+
+// --------------------------------------------------
+
+// studentNameSort
+// Type: String
+// Options:
+// - asc   (A → Z)
+// - desc  (Z → A)
+
+// --------------------------------------------------
+
+// remainingAmountSort
+// Type: String
+// Options:
+// - asc   (Lowest Remaining Amount First)
+// - desc  (Highest Remaining Amount First)
+
+// --------------------------------------------------
+
+// enrollmentDateSort
+// Type: String
+// Options:
+// - asc   (Oldest Enrollment First)
+// - desc  (Latest Enrollment First)
 
 export const updateEnrollmentAffiliatePartner = async (req, res) => {
   try {
@@ -465,6 +842,125 @@ export const addEnrollmentPayment = async (req, res) => {
     });
   } catch (error) {
     console.error("Add payment error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};
+
+
+
+export const getEnrollmentById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid enrollment ID.",
+      });
+    }
+
+    const enrollment = await Enrollment.findById(id)
+      .populate({
+        path: "studentId",
+        select:
+          "fullName mobileNumber instituteName address dob gender branch semester passingYear status",
+      })
+      .populate({
+        path: "courseId",
+        select:
+          "name type durationMonths actualPrice discountedPrice registrationFee description syllabus status",
+      })
+      .populate({
+        path: "batchId",
+        select:
+          "name mode capacity enrolledStudents startDate endDate status trainer",
+        populate: {
+          path: "trainer",
+          select: "name",
+        },
+      })
+      .populate({
+        path: "affiliatePartner",
+        select: "name companyName mobileNumber",
+      })
+      .lean();
+
+    if (!enrollment) {
+      return res.status(404).json({
+        success: false,
+        message: "Enrollment not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Enrollment details fetched successfully.",
+      data: {
+        enrollmentId: enrollment._id,
+
+        student: {
+          id: enrollment.studentId?._id,
+          fullName: enrollment.studentId?.fullName,
+          mobileNumber: enrollment.studentId?.mobileNumber,
+          instituteName: enrollment.studentId?.instituteName,
+          address: enrollment.studentId?.address,
+          dob: enrollment.studentId?.dob,
+          gender: enrollment.studentId?.gender,
+          branch: enrollment.studentId?.branch,
+          semester: enrollment.studentId?.semester,
+          passingYear: enrollment.studentId?.passingYear,
+          status: enrollment.studentId?.status,
+        },
+
+        course: {
+          id: enrollment.courseId?._id,
+          name: enrollment.courseId?.name,
+          type: enrollment.courseId?.type,
+          durationMonths: enrollment.courseId?.durationMonths,
+          actualPrice: enrollment.courseId?.actualPrice,
+          discountedPrice: enrollment.courseId?.discountedPrice,
+          registrationFee: enrollment.courseId?.registrationFee,
+          description: enrollment.courseId?.description,
+          syllabus: enrollment.courseId?.syllabus,
+          status: enrollment.courseId?.status,
+        },
+
+        batch: {
+          id: enrollment.batchId?._id,
+          name: enrollment.batchId?.name,
+          mode: enrollment.batchId?.mode,
+          capacity: enrollment.batchId?.capacity,
+          enrolledStudents: enrollment.batchId?.enrolledStudents,
+          startDate: enrollment.batchId?.startDate,
+          endDate: enrollment.batchId?.endDate,
+          trainer: enrollment.batchId?.trainer,
+          status: enrollment.batchId?.status,
+        },
+
+        feeDetails: {
+          courseTotalFee: enrollment.courseTotalFee,
+          registrationFeeAmount: enrollment.registrationFeeAmount,
+          totalPaidAmount: enrollment.totalPaidAmount,
+          remainingAmount: enrollment.remainingAmount,
+          paymentStatus: enrollment.paymentStatus,
+        },
+
+        paymentHistory: enrollment.payments,
+
+        affiliatePartner: enrollment.affiliatePartner,
+
+        enrollmentDate: enrollment.enrollmentDate,
+        enrollmentStatus: enrollment.status,
+        createdAt: enrollment.createdAt,
+        updatedAt: enrollment.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error("Get enrollment error:", error);
 
     return res.status(500).json({
       success: false,

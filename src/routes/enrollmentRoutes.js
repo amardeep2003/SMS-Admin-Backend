@@ -2,7 +2,8 @@ import express from "express";
 import {
   getAllEnrollments,
   updateEnrollmentAffiliatePartner,
-  addEnrollmentPayment
+  addEnrollmentPayment,
+  getEnrollmentById
 } from "../controllers/enrollmentController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -17,6 +18,8 @@ router.get("/", getAllEnrollments);
 router.patch("/:id/affiliate", updateEnrollmentAffiliatePartner);
 
 router.post("/:enrollmentId/payment", addEnrollmentPayment);
+
+router.get("/:id", getEnrollmentById);
 
 
 

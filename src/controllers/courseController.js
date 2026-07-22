@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Course from "../models/course.js";
+import Batch from "../models/batch.js";
 
 const ALLOWED_COURSE_TYPES = ["VT", "LT"];
 const ALLOWED_COURSE_STATUSES = ["ACTIVE", "INACTIVE"];
@@ -494,7 +495,7 @@ export const getAllCourses = async (req, res) => {
 //   }
 // };
 
-import Batch from "../models/batch.js";
+
 
 export const getCourseById = async (req, res) => {
   try {
