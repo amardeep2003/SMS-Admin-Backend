@@ -864,3 +864,100 @@ export const addBatch = async (req, res) => {
     });
   }
 };
+
+export const removeStudentFromBatch = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const { batchId, studentId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(batchId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid batch ID.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid student ID.",
+      });
+    }
+
+    await session.withTransaction(async () => {
+      // Check batch
+      const batch = await Batch.findById(batchId).session(session);
+
+      if (!batch) {
+        const error = new Error("Batch not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Check student exists in batch
+      const exists = batch.students.some((id) => id.toString() === studentId);
+
+      if (!exists) {
+        const error = new Error("Student is not assigned to this batch.");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Find active enrollment
+      const enrollment = await Enrollment.findOne({
+        studentId,
+        batchId,
+        status: "ACTIVE",
+      }).session(session);
+
+      if (!enrollment) {
+        const error = new Error("Active enrollment not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Drop enrollment
+      enrollment.status = "DROPPED";
+
+      await enrollment.save({ session });
+
+      // Remove student from batch
+      const updatedBatch = await Batch.findByIdAndUpdate(
+        batchId,
+        {
+          $pull: {
+            students: studentId,
+          },
+          $inc: {
+            enrolledStudents: -1,
+          },
+        },
+        {
+          new: true,
+          session,
+        },
+      );
+
+      if (!updatedBatch) {
+        const error = new Error("Unable to update batch.");
+        error.statusCode = 500;
+        throw error;
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Student removed from batch successfully.",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Internal server error.",
+    });
+  } finally {
+    await session.endSession();
+  }
+};

@@ -10,7 +10,7 @@ const paymentHistorySchema = new mongoose.Schema(
 
     paymentType: {
       type: String,
-      required: [true, "Payment type is required."],
+      required: [false, "Payment type is required."],
       enum: {
         values: ["REGISTRATION_FEE", "COURSE_FEE"],
         message: "Payment type must be REGISTRATION_FEE or COURSE_FEE.",

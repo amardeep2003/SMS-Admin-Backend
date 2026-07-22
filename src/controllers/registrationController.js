@@ -5,7 +5,7 @@ import Batch from "../models/batch.js";
 import BatchCounter from "../models/batchCounter.js";
 import Enrollment from "../models/enrollment.js";
 
-const REGISTRATION_FEE = 500;
+// const REGISTRATION_FEE = 500;
 const ALLOWED_COURSE_TYPES = ["VT", "LT"];
 // const ALLOWED_PAYMENT_MODES = ["CASH", "ONLINE"];
 
@@ -89,6 +89,13 @@ export const registerStudent = async (req, res) => {
       courseId,
       instituteName,
       address,
+
+      dob,
+      gender,
+      branch,
+      semester,
+      passingYear,
+
       registrationFeePaid,
       transactionId = null,
     } = req.body;
@@ -187,6 +194,119 @@ export const registerStudent = async (req, res) => {
         success: false,
         message: "Address must be between 5 and 1000 characters.",
       });
+    }
+
+    // -----------------------------
+    // DOB Validation
+    // -----------------------------
+    if (!dob) {
+      return res.status(400).json({
+        success: false,
+        message: "Date of birth is required.",
+      });
+    }
+
+    const parsedDob = new Date(dob);
+
+    if (Number.isNaN(parsedDob.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date of birth.",
+      });
+    }
+
+    if (parsedDob >= new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Date of birth must be a past date.",
+      });
+    }
+
+    // -----------------------------
+    // Gender Validation
+    // -----------------------------
+    if (typeof gender !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Gender must be a string.",
+      });
+    }
+
+    const normalizedGender = gender.trim().toUpperCase();
+
+    if (!["MALE", "FEMALE", "OTHER"].includes(normalizedGender)) {
+      return res.status(400).json({
+        success: false,
+        message: "Gender must be MALE, FEMALE or OTHER.",
+      });
+    }
+
+    // -----------------------------
+    // Branch Validation
+    // -----------------------------
+    let normalizedBranch = "";
+
+    if (branch !== undefined && branch !== null) {
+      if (typeof branch !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Branch must be a string.",
+        });
+      }
+
+      normalizedBranch = branch.trim();
+
+      if (
+        normalizedBranch &&
+        (normalizedBranch.length < 2 || normalizedBranch.length > 100)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Branch must be between 2 and 100 characters.",
+        });
+      }
+    }
+
+    // -----------------------------
+    // Semester Validation
+    // -----------------------------
+    let normalizedSemester = null;
+
+    if (semester !== undefined && semester !== null && semester !== "") {
+      const sem = Number(semester);
+
+      if (!Number.isInteger(sem) || sem < 1 || sem > 12) {
+        return res.status(400).json({
+          success: false,
+          message: "Semester must be an integer between 1 and 12.",
+        });
+      }
+
+      normalizedSemester = sem;
+    }
+
+    // -----------------------------
+    // Passing Year Validation
+    // -----------------------------
+    let normalizedPassingYear = null;
+
+    if (
+      passingYear !== undefined &&
+      passingYear !== null &&
+      passingYear !== ""
+    ) {
+      const year = Number(passingYear);
+
+      const maxYear = new Date().getFullYear() + 10;
+
+      if (!Number.isInteger(year) || year < 2000 || year > maxYear) {
+        return res.status(400).json({
+          success: false,
+          message: `Passing year must be between 2000 and ${maxYear}.`,
+        });
+      }
+
+      normalizedPassingYear = year;
     }
 
     // Current dummy payment flow:
@@ -289,15 +409,45 @@ export const registerStudent = async (req, res) => {
         ? course.discountedPrice
         : course.actualPrice;
 
+    const registrationFee = course.registrationFee ?? 500;
+
+    // if (
+    //   typeof courseTotalFee !== "number" ||
+    //   !Number.isFinite(courseTotalFee) ||
+    //   courseTotalFee < REGISTRATION_FEE
+    // ) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message:
+    //       "Course fee must be at least ₹500 to accept the registration fee.",
+    //   });
+    // }
+
     if (
       typeof courseTotalFee !== "number" ||
-      !Number.isFinite(courseTotalFee) ||
-      courseTotalFee < REGISTRATION_FEE
+      !Number.isFinite(courseTotalFee)
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "Course fee must be at least ₹500 to accept the registration fee.",
+        message: "Invalid course fee.",
+      });
+    }
+
+    if (
+      typeof registrationFee !== "number" ||
+      !Number.isFinite(registrationFee) ||
+      registrationFee < 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid registration fee.",
+      });
+    }
+
+    if (registrationFee > courseTotalFee) {
+      return res.status(400).json({
+        success: false,
+        message: "Registration fee cannot be greater than course fee.",
       });
     }
 
@@ -322,6 +472,12 @@ export const registerStudent = async (req, res) => {
               mobileNumber: normalizedMobileNumber,
               instituteName: normalizedInstituteName,
               address: normalizedAddress,
+
+              dob: parsedDob,
+              gender: normalizedGender,
+              branch: normalizedBranch || undefined,
+              semester: normalizedSemester,
+              passingYear: normalizedPassingYear,
             },
           ],
           { session },
@@ -329,6 +485,18 @@ export const registerStudent = async (req, res) => {
 
         student = createdStudents[0];
         isNewStudent = true;
+      } else {
+        student.fullName = normalizedFullName;
+        student.instituteName = normalizedInstituteName;
+        student.address = normalizedAddress;
+
+        student.dob = parsedDob;
+        student.gender = normalizedGender;
+        student.branch = normalizedBranch || undefined;
+        student.semester = normalizedSemester;
+        student.passingYear = normalizedPassingYear;
+
+        await student.save({ session });
       }
 
       // Prevent duplicate active enrollment
@@ -431,7 +599,8 @@ export const registerStudent = async (req, res) => {
       // -----------------------------
       // Enrollment payment calculation
       // -----------------------------
-      const totalPaidAmount = REGISTRATION_FEE;
+      // const totalPaidAmount = REGISTRATION_FEE;
+      const totalPaidAmount = registrationFee;
       const remainingAmount = courseTotalFee - totalPaidAmount;
 
       const paymentStatus = remainingAmount === 0 ? "PAID" : "PARTIALLY_PAID";
@@ -447,7 +616,9 @@ export const registerStudent = async (req, res) => {
             batchId: batch._id,
 
             courseTotalFee,
-            registrationFeeAmount: REGISTRATION_FEE,
+            // registrationFeeAmount: REGISTRATION_FEE,
+
+            registrationFeeAmount: registrationFee,
 
             totalPaidAmount,
             remainingAmount,
@@ -455,7 +626,8 @@ export const registerStudent = async (req, res) => {
 
             payments: [
               {
-                amount: REGISTRATION_FEE,
+                // amount: REGISTRATION_FEE,
+                amount: registrationFee,
                 paymentType: "REGISTRATION_FEE",
                 paymentMode: "ONLINE",
                 transactionId: normalizedTransactionId,
@@ -583,5 +755,55 @@ export const registerStudent = async (req, res) => {
     return handleRegistrationError(res, error);
   } finally {
     await session.endSession();
+  }
+};
+
+/**
+ * GET /api/courses/:id/registration-fee
+ * Get registration fee of a course
+ */
+export const getCourseFeeStructure = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate Course ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID.",
+      });
+    }
+
+    // Find Course
+    const course = await Course.findById(id)
+      .select("name registrationFee actualPrice discountedPrice status")
+      .lean();
+
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Course fee details fetched successfully.",
+      data: {
+        courseId: course._id,
+        courseName: course.name,
+        registrationFee: course.registrationFee,
+        actualPrice: course.actualPrice,
+        discountedPrice: course.discountedPrice,
+        status: course.status,
+      },
+    });
+  } catch (error) {
+    console.error("Get course fee details error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
   }
 };

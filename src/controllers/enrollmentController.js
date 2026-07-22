@@ -300,3 +300,175 @@ export const updateEnrollmentAffiliatePartner = async (req, res) => {
     });
   }
 };
+
+export const addEnrollmentPayment = async (req, res) => {
+  try {
+    const { enrollmentId } = req.params;
+    const { amount, paymentMode, transactionId, note } = req.body;
+
+    // ----------------------------
+    // Validate Enrollment ID
+    // ----------------------------
+    if (!mongoose.Types.ObjectId.isValid(enrollmentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid enrollment ID.",
+      });
+    }
+
+    // ----------------------------
+    // Amount Validation
+    // ----------------------------
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Amount must be greater than 0.",
+      });
+    }
+
+    // ----------------------------
+    // Payment Mode Validation
+    // ----------------------------
+    if (typeof paymentMode !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Payment mode is required.",
+      });
+    }
+
+    const normalizedPaymentMode = paymentMode.trim().toUpperCase();
+
+    if (!["CASH", "ONLINE"].includes(normalizedPaymentMode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment mode must be CASH or ONLINE.",
+      });
+    }
+
+    // ----------------------------
+    // Transaction Id Validation
+    // ----------------------------
+    let normalizedTransactionId = null;
+
+    if (
+      transactionId !== undefined &&
+      transactionId !== null &&
+      transactionId !== ""
+    ) {
+      if (typeof transactionId !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Transaction ID must be a string.",
+        });
+      }
+
+      normalizedTransactionId = transactionId.trim();
+
+      if (normalizedTransactionId.length > 200) {
+        return res.status(400).json({
+          success: false,
+          message: "Transaction ID cannot exceed 200 characters.",
+        });
+      }
+    }
+
+    // ----------------------------
+    // Note Validation
+    // ----------------------------
+    let normalizedNote = "";
+
+    if (note !== undefined && note !== null) {
+      if (typeof note !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Note must be a string.",
+        });
+      }
+
+      normalizedNote = note.trim();
+
+      if (normalizedNote.length > 500) {
+        return res.status(400).json({
+          success: false,
+          message: "Note cannot exceed 500 characters.",
+        });
+      }
+    }
+
+    // ----------------------------
+    // Find Enrollment
+    // ----------------------------
+    const enrollment = await Enrollment.findById(enrollmentId);
+
+    if (!enrollment) {
+      return res.status(404).json({
+        success: false,
+        message: "Enrollment not found.",
+      });
+    }
+
+    if (enrollment.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Enrollment is not active.",
+      });
+    }
+
+    if (enrollment.remainingAmount === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Course fee is already fully paid.",
+      });
+    }
+
+    // ----------------------------
+    // Overpayment Check
+    // ----------------------------
+    if (amount > enrollment.remainingAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `Maximum payable amount is ₹${enrollment.remainingAmount}.`,
+      });
+    }
+
+    // ----------------------------
+    // Update Payment
+    // ----------------------------
+    enrollment.totalPaidAmount += amount;
+    enrollment.remainingAmount -= amount;
+
+    enrollment.paymentStatus =
+      enrollment.remainingAmount === 0 ? "PAID" : "PARTIALLY_PAID";
+
+    enrollment.payments.push({
+      amount,
+      paymentType: "COURSE_FEE",
+      paymentMode: normalizedPaymentMode,
+      transactionId: normalizedTransactionId,
+      paymentDate: new Date(),
+      note: normalizedNote,
+    });
+
+    await enrollment.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment added successfully.",
+      data: {
+        enrollmentId: enrollment._id,
+        courseTotalFee: enrollment.courseTotalFee,
+        totalPaidAmount: enrollment.totalPaidAmount,
+        remainingAmount: enrollment.remainingAmount,
+        paymentStatus: enrollment.paymentStatus,
+        lastPayment: enrollment.payments.at(-1),
+      },
+    });
+  } catch (error) {
+    console.error("Add payment error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+};

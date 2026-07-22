@@ -68,6 +68,13 @@ const courseSchema = new mongoose.Schema(
       default: null,
     },
 
+    registrationFee: {
+      type: Number,
+      required: [true, "Registration fee is required."],
+      min: [0, "Registration fee cannot be negative."],
+      default: 500,
+    },
+
     status: {
       type: String,
       enum: {

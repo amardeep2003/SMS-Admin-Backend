@@ -131,9 +131,9 @@ export const getAllStudents = async (req, res) => {
                     {
                       $eq: ["$studentId", "$$studentId"],
                     },
-                    {
-                      $eq: ["$status", "ACTIVE"],
-                    },
+                    // {
+                    //   $eq: ["$status", "ACTIVE"],
+                    // },
                   ],
                 },
               },

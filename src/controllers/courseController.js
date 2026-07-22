@@ -13,6 +13,7 @@ const ALLOWED_UPDATE_FIELDS = [
   //   "practicalWorkshopDetails",
   "actualPrice",
   "discountedPrice",
+  "registrationFee",
   "status",
 ];
 
@@ -49,6 +50,7 @@ export const createCourse = async (req, res) => {
       //   practicalWorkshopDetails = "",
       actualPrice,
       discountedPrice = null,
+      registrationFee = 500,
       status = "ACTIVE",
     } = req.body;
 
@@ -87,6 +89,24 @@ export const createCourse = async (req, res) => {
     //     message: "Practical workshop details must be a string.",
     //   });
     // }
+
+    if (
+      typeof registrationFee !== "number" ||
+      !Number.isFinite(registrationFee) ||
+      registrationFee < 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Registration fee must be a valid non-negative number.",
+      });
+    }
+
+    if (registrationFee > actualPrice) {
+      return res.status(400).json({
+        success: false,
+        message: "Registration fee cannot be greater than actual price.",
+      });
+    }
 
     if (typeof status !== "string") {
       return res.status(400).json({
@@ -202,6 +222,7 @@ export const createCourse = async (req, res) => {
       //   practicalWorkshopDetails: practicalWorkshopDetails.trim(),
       actualPrice,
       discountedPrice,
+      registrationFee,
       status: normalizedStatus,
     });
 
@@ -696,6 +717,19 @@ export const updateCourse = async (req, res) => {
       updates.discountedPrice = price;
     }
 
+    if (req.body.registrationFee !== undefined) {
+      const fee = req.body.registrationFee;
+
+      if (typeof fee !== "number" || !Number.isFinite(fee) || fee < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Registration fee must be a valid non-negative number.",
+        });
+      }
+
+      updates.registrationFee = fee;
+    }
+
     if (req.body.status !== undefined) {
       if (typeof req.body.status !== "string") {
         return res.status(400).json({
@@ -726,6 +760,11 @@ export const updateCourse = async (req, res) => {
         ? updates.discountedPrice
         : course.discountedPrice;
 
+    const finalRegistrationFee =
+      updates.registrationFee !== undefined
+        ? updates.registrationFee
+        : course.registrationFee;
+
     if (
       finalDiscountedPrice !== null &&
       finalDiscountedPrice > finalActualPrice
@@ -733,6 +772,13 @@ export const updateCourse = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Discounted price cannot be greater than actual price.",
+      });
+    }
+
+    if (finalRegistrationFee > finalActualPrice) {
+      return res.status(400).json({
+        success: false,
+        message: "Registration fee cannot be greater than actual price.",
       });
     }
 

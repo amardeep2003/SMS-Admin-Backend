@@ -6,7 +6,8 @@ import {
   updateBatch,
   addStudentToBatch,
   toggleBatchStatus,
-  addBatch
+  addBatch,
+  removeStudentFromBatch
 } from "../controllers/batchController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -26,5 +27,7 @@ router.put("/:id", updateBatch);
 router.post("/:id/students", addStudentToBatch);
 
 router.patch("/:id/toggle-status", toggleBatchStatus);
+
+router.patch("/:batchId/remove-student/:studentId", removeStudentFromBatch);
 
 export default router;
