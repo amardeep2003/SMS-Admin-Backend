@@ -885,7 +885,7 @@ export const getEnrollmentById = async (req, res) => {
       })
       .populate({
         path: "affiliatePartner",
-        select: "name companyName mobileNumber",
+        select: "fullName email mobileNumber",
       })
       .lean();
 
