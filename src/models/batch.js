@@ -85,7 +85,7 @@ const batchSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: {
-        values: ["ACTIVE", "INACTIVE", "COMPLETED"],
+        values: ["ACTIVE", "INACTIVE", "COMPLETED","RUNNING"],
         message: "Invalid batch status.",
       },
       default: "ACTIVE",
